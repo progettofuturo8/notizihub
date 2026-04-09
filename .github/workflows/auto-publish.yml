@@ -31,49 +31,23 @@ jobs:
           ARTICLES_PER_NICHE: '1'
         run: node index.js
 
-      - name: Salva variabili report
+      - name: Leggi risultati
         run: |
           echo "TODAY=$(date '+%Y-%m-%d')" >> $GITHUB_ENV
           REPORT="output/report-$(date '+%Y-%m-%d').json"
           if [ -f "$REPORT" ]; then
-            TOTALE=$(python3 -c "import json; d=json.load(open('$REPORT')); print(d.get('totale', d.get('totale_articoli', 0)))")
+            TOTALE=$(cat "$REPORT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('totale', d.get('totale_articoli', 0)))")
             echo "TOTALE=$TOTALE" >> $GITHUB_ENV
           else
             echo "TOTALE=0" >> $GITHUB_ENV
           fi
-
-      - name: Genera tabella articoli
-        run: |
-          REPORT="output/report-$(date '+%Y-%m-%d').json"
-          if [ -f "$REPORT" ]; then
-            python3 << 'PYEOF'
-import json, os
-with open(f"output/report-{os.environ.get('TODAY', '')}.json") as f:
-    d = json.load(f)
-arts = d.get('articoli', [])
-rows = ""
-for a in arts[:40]:
-    nicchia = a.get('nicchia', '').upper()
-    titolo = a.get('titolo', '').replace('<', '&lt;').replace('>', '&gt;')
-    rows += f"<tr><td style='padding:8px 10px;color:#e63946;font-weight:bold;border-bottom:1px solid #eee'>{nicchia}</td><td style='padding:8px 10px;border-bottom:1px solid #eee'>{titolo}</td></tr>\n"
-with open('/tmp/table.html', 'w') as f:
-    f.write(rows)
-print(f"Tabella generata con {len(arts)} articoli")
-PYEOF
-          else
-            echo "<tr><td colspan='2' style='padding:10px'>Nessun articolo generato oggi</td></tr>" > /tmp/table.html
-          fi
-          TABLE=$(cat /tmp/table.html)
-          echo "ARTICOLI_TABLE<<EOF" >> $GITHUB_ENV
-          echo "$TABLE" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
 
       - name: Commit e push articoli
         run: |
           git config --local user.email "bot@notizihub.com"
           git config --local user.name "NotiziHub Bot"
           git add output/
-          git diff --staged --quiet || git commit -m "Auto: ${{ env.TODAY }} — ${{ env.TOTALE }} articoli generati"
+          git diff --staged --quiet || git commit -m "Auto: $(date '+%Y-%m-%d') — nuovi articoli"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -89,44 +63,5 @@ PYEOF
           to: ${{ secrets.GMAIL_USER }}
           from: NotiziHub Bot <${{ secrets.GMAIL_USER }}>
           content_type: text/html
-          body: |
-            <html>
-            <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f4f4f4;padding:20px">
-              <div style="background:#111;padding:20px;text-align:center;border-radius:8px 8px 0 0">
-                <h1 style="color:white;font-size:28px;margin:0">NotiziHub</h1>
-                <p style="color:#999;margin:5px 0;font-size:13px">Report giornaliero automatico</p>
-              </div>
-              <div style="background:white;padding:20px">
-                <table style="width:100%;margin-bottom:20px;border-collapse:collapse">
-                  <tr>
-                    <td style="background:#f9f9f9;border-left:4px solid #e63946;padding:15px;border-radius:4px">
-                      <div style="font-size:12px;color:#999">Data</div>
-                      <div style="font-size:22px;font-weight:bold">${{ env.TODAY }}</div>
-                    </td>
-                    <td style="width:15px"></td>
-                    <td style="background:#f9f9f9;border-left:4px solid #2a9d8f;padding:15px;border-radius:4px">
-                      <div style="font-size:12px;color:#999">Articoli generati</div>
-                      <div style="font-size:22px;font-weight:bold">${{ env.TOTALE }}</div>
-                    </td>
-                  </tr>
-                </table>
-                <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #eee">
-                  <thead>
-                    <tr style="background:#111;color:white">
-                      <th style="padding:10px;text-align:left;width:130px">Nicchia</th>
-                      <th style="padding:10px;text-align:left">Titolo articolo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${{ env.ARTICOLI_TABLE }}
-                  </tbody>
-                </table>
-                <div style="margin-top:20px;text-align:center">
-                  <a href="https://www.notizihub.com" style="background:#e63946;color:white;padding:12px 28px;border-radius:4px;text-decoration:none;font-weight:bold">Visita NotiziHub</a>
-                </div>
-              </div>
-              <div style="padding:15px;text-align:center;color:#999;font-size:12px">
-                NotiziHub · Aggiornamento automatico quotidiano
-              </div>
-            </body>
-            </html>
+          body: "<html><body style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto'><div style='background:#111;padding:20px;text-align:center'><h1 style='color:white;margin:0'>NotiziHub</h1><p style='color:#999;font-size:13px'>Report giornaliero</p></div><div style='padding:20px;background:#f9f9f9'><table style='width:100%;border-collapse:collapse'><tr><td style='padding:15px;background:white;border-left:4px solid #e63946;border-radius:4px'><div style='font-size:12px;color:#999'>Data</div><div style='font-size:24px;font-weight:bold'>${{ env.TODAY }}</div></td><td style='width:15px'></td><td style='padding:15px;background:white;border-left:4px solid #2a9d8f;border-radius:4px'><div style='font-size:12px;color:#999'>Articoli generati</div><div style='font-size:24px;font-weight:bold'>${{ env.TOTALE }}</div></td></tr></table><div style='margin-top:20px;text-align:center'><a href='https://www.notizihub.com' style='background:#e63946;color:white;padding:12px 28px;border-radius:4px;text-decoration:none;font-weight:bold'>Visita NotiziHub</a></div></div><div style='padding:15px;text-align:center;color:#999;font-size:12px'>NotiziHub - Aggiornamento automatico quotidiano</div></body></html>"
+
