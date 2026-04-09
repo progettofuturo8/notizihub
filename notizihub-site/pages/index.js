@@ -81,7 +81,7 @@ export async function getStaticProps() {
   }
 
   articoli.sort((a, b) => new Date(b.data) - new Date(a.data));
-  return { props: { articoli: articoli.slice(0, 40) }, revalidate: 3600 };
+  return { props: { articoli: articoli.slice(0, 40) }, revalidate: 60 };
 }
 
 export default function Home({ articoli }) {
