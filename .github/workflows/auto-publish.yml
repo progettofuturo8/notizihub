@@ -1,34 +1,120 @@
-name: Generate Daily News
+name: Auto Publisher — NotiziHub
+
 on:
   schedule:
-    - cron: '0 7 * * *' # Gira ogni mattina alle 7:00
-  workflow_dispatch: # Ti permette di avviarlo a mano con un tasto
+    - cron: '0 6 * * *'
+  workflow_dispatch:
 
 jobs:
-  build:
+  genera-articoli:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
-      - run: npm install
-      - name: Run generation script
-        run: node index.js # Assicurati che il tuo script si chiami index.js
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Installa dipendenze
+        run: npm ci
+
+      - name: Genera articoli con Claude AI
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      - name: Commit and Push changes
-        run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
-          git add .
-          git commit -m "Nuovi articoli generati" || exit 0
-          git push
+          SITE_URL: ${{ secrets.SITE_URL || 'https://www.notizihub.com' }}
+          OUTPUT_DIR: './output'
+          ARTICLES_PER_NICHE: '1'
+        run: node index.js
 
-          from: NotiziHub Bot
+      - name: Salva data di oggi
+        run: echo "TODAY=$(date '+%Y-%m-%d')" >> $GITHUB_ENV
+
+      - name: Leggi report
+        id: report
+        run: |
+          REPORT="output/report-$(date '+%Y-%m-%d').json"
+          if [ -f "$REPORT" ]; then
+            TOTALE=$(cat "$REPORT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('totale', d.get('totale_articoli', 0)))")
+            echo "TOTALE=$TOTALE" >> $GITHUB_ENV
+            ARTICOLI=$(cat "$REPORT" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+arts=d.get('articoli',[])
+rows='\n'.join([f'<tr style=\"border-bottom:1px solid #eee\"><td style=\"padding:8px 10px;color:#e63946;font-weight:bold\">{a.get(\"nicchia\",\"\").upper()}</td><td style=\"padding:8px 10px\">{a.get(\"titolo\",\"\")}</td></tr>' for a in arts[:40]])
+print(rows)
+")
+            echo "ARTICOLI_TABLE<<EOF" >> $GITHUB_ENV
+            echo "$ARTICOLI" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          else
+            echo "TOTALE=0" >> $GITHUB_ENV
+            echo "ARTICOLI_TABLE=<tr><td colspan='2' style='padding:10px'>Nessun articolo generato</td></tr>" >> $GITHUB_ENV
+          fi
+
+      - name: Commit e push articoli
+        run: |
+          git config --local user.email "bot@notizihub.com"
+          git config --local user.name "NotiziHub Bot"
+          git add output/
+          git diff --staged --quiet || git commit -m "Auto: $(date '+%Y-%m-%d') — ${{ env.TOTALE }} articoli generati"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Invia email report
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.GMAIL_USER }}
+          password: ${{ secrets.GMAIL_PASSWORD }}
+          subject: "NotiziHub — ${{ env.TOTALE }} articoli generati il ${{ env.TODAY }}"
+          to: ${{ secrets.GMAIL_USER }}
+          from: NotiziHub Bot <${{ secrets.GMAIL_USER }}>
+          content_type: text/html
           body: |
-            Generazione articoli completata!
-            
-            Data: ${{ env.TODAY }}
-            
-            Controlla il report completo su GitHub Actions.
+            <html>
+            <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f4f4f4;padding:20px">
+              <div style="background:#111;padding:20px;text-align:center;border-radius:8px 8px 0 0">
+                <h1 style="color:white;font-size:28px;margin:0">NotiziHub</h1>
+                <p style="color:#999;margin:5px 0;font-size:13px">Report giornaliero automatico</p>
+              </div>
+              <div style="background:white;padding:20px">
+                <table style="width:100%;margin-bottom:20px">
+                  <tr>
+                    <td style="background:#f9f9f9;border-left:4px solid #e63946;padding:15px;border-radius:4px;width:50%">
+                      <div style="font-size:12px;color:#999">Data</div>
+                      <div style="font-size:22px;font-weight:bold">${{ env.TODAY }}</div>
+                    </td>
+                    <td style="width:10px"></td>
+                    <td style="background:#f9f9f9;border-left:4px solid #2a9d8f;padding:15px;border-radius:4px;width:50%">
+                      <div style="font-size:12px;color:#999">Articoli generati</div>
+                      <div style="font-size:22px;font-weight:bold">${{ env.TOTALE }}</div>
+                    </td>
+                  </tr>
+                </table>
+                <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #eee;border-radius:4px">
+                  <thead>
+                    <tr style="background:#111;color:white">
+                      <th style="padding:10px;text-align:left;width:120px">Nicchia</th>
+                      <th style="padding:10px;text-align:left">Titolo articolo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${{ env.ARTICOLI_TABLE }}
+                  </tbody>
+                </table>
+                <div style="margin-top:20px;text-align:center">
+                  <a href="https://www.notizihub.com" style="background:#e63946;color:white;padding:12px 28px;border-radius:4px;text-decoration:none;font-weight:bold;font-size:14px">Visita NotiziHub</a>
+                </div>
+              </div>
+              <div style="padding:15px;text-align:center;color:#999;font-size:12px">
+                NotiziHub · Aggiornamento automatico quotidiano
+              </div>
+            </body>
+            </html>
