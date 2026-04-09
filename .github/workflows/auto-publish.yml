@@ -24,3 +24,19 @@ jobs:
           git add .
           git commit -m "Nuovi articoli generati" || exit 0
           git push
+- name: Invia email report
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.progettofuturo8@gmail.com }}
+          password: ${{ secrets.dvld bhfi kxvz jqps }}
+          subject: "NotiziHub - Report ${{ env.TODAY }}"
+          to: progettofuturo8@gmail.com
+          from: NotiziHub Bot
+          body: |
+            Generazione articoli completata!
+            
+            Data: ${{ env.TODAY }}
+            
+            Controlla il report completo su GitHub Actions.
