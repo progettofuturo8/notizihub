@@ -47,7 +47,7 @@ jobs:
         run: |
           git config --local user.email "bot@notizihub.com"
           git config --local user.name "NotiziHub Bot"
-          git add output/*/$(date '+%Y-%m-%d')*.md output/report-$(date '+%Y-%m-%d').json || true
+          git add output/ || true
           git diff --staged --quiet || git commit -m "Auto: $(date '+%Y-%m-%d') — nuovi articoli"
           git push
         env:
