@@ -43,6 +43,7 @@ jobs:
           fi
 
       - name: Commit e push articoli
+        timeout-minutes: 10
         run: |
           git config --local user.email "bot@notizihub.com"
           git config --local user.name "NotiziHub Bot"
